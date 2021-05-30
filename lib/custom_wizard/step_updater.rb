@@ -2,9 +2,9 @@
 class CustomWizard::StepUpdater
   include ActiveModel::Model
 
-  attr_accessor :refresh_required, :result
+  # Added Wizard to attr_accessor list
+  attr_accessor :refresh_required, :result, :wizard
   attr_reader :step, :submission
-
   def initialize(current_user, wizard, step, submission)
     @current_user = current_user
     @wizard = wizard
