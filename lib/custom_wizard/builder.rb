@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 class CustomWizard::Builder
-  attr_accessor :wizard, :updater, :template
+  attr_accessor :wizard, :updater, :template, :submission
 
   def initialize(wizard_id, user = nil)
     @template = CustomWizard::Template.create(wizard_id)
