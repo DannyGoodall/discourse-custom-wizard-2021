@@ -97,6 +97,31 @@ describe CustomWizard::UpdateValidator do
     ).to eq(nil)
   end
 
+  it "applies min length only if the input is non-empty" do
+    min_length = 3
+
+    @template[:steps][0][:fields][0][:min_length] = min_length
+
+    CustomWizard::Template.save(@template)
+
+    updater = perform_validation('step_1', step_1_field_1: '')
+    expect(
+      updater.errors.messages[:step_1_field_1].first
+    ).to eq(nil)
+  end
+
+  it "applies max length only if the input is non-empty" do
+    max_length = 100
+
+    @template[:steps][0][:fields][0][:max_length] = max_length
+
+    CustomWizard::Template.save(@template)
+    updater = perform_validation('step_1', step_1_field_1: "")
+    expect(
+      updater.errors.messages[:step_1_field_1].first
+    ).to eq(nil)
+  end
+
   it 'standardises boolean entries' do
     updater = perform_validation('step_2', step_2_field_5: 'false')
     expect(updater.submission['step_2_field_5']).to eq(false)
@@ -131,5 +156,45 @@ describe CustomWizard::UpdateValidator do
     expect(
       updater.errors.messages[:step_2_field_6].first
     ).to eq(nil)
+  end
+
+  it 'validates date fields' do
+    @template[:steps][1][:fields][0][:format] = "DD-MM-YYYY"
+    CustomWizard::Template.save(@template)
+
+    updater = perform_validation('step_2', step_2_field_1: '13-11-2021')
+    expect(
+      updater.errors.messages[:step_2_field_1].first
+    ).to eq(nil)
+  end
+
+  it 'doesn\'t validate date field if the format is not respected' do
+    @template[:steps][1][:fields][0][:format] = "MM-DD-YYYY"
+    CustomWizard::Template.save(@template)
+
+    updater = perform_validation('step_2', step_2_field_1: '13-11-2021')
+    expect(
+      updater.errors.messages[:step_2_field_1].first
+    ).to eq(I18n.t('wizard.field.invalid_date'))
+  end
+
+  it 'validates date time fields' do
+    @template[:steps][1][:fields][2][:format] = "DD-MM-YYYY HH:mm:ss"
+    CustomWizard::Template.save(@template)
+
+    updater = perform_validation('step_2', step_2_field_3: '13-11-2021 09:15:00')
+    expect(
+      updater.errors.messages[:step_2_field_3].first
+    ).to eq(nil)
+  end
+
+  it 'doesn\'t validate date time field if the format is not respected' do
+    @template[:steps][1][:fields][2][:format] = "MM-DD-YYYY HH:mm:ss"
+    CustomWizard::Template.save(@template)
+
+    updater = perform_validation('step_2', step_2_field_3: '13-11-2021 09:15')
+    expect(
+      updater.errors.messages[:step_2_field_3].first
+    ).to eq(I18n.t('wizard.field.invalid_date'))
   end
 end
