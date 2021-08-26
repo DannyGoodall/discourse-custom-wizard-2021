@@ -37,13 +37,13 @@ class CustomWizard::Builder
   def mapper
     CustomWizard::Mapper.new(
       user: @wizard.user,
-      data: @wizard.current_submission
+      data: @wizard.current_submission&.fields_and_meta
     )
   end
 
   def build(build_opts = {}, params = {})
     return nil if !SiteSetting.custom_wizard_enabled || !@wizard
-    return @wizard if !@wizard.can_access?
+    return @wizard if !@wizard.can_access? && !build_opts[:force]
 
     build_opts[:reset] = build_opts[:reset] || @wizard.restart_on_revisit
 
@@ -60,9 +60,8 @@ class CustomWizard::Builder
 
         step.on_update do |updater|
           @updater = updater
-          @submission = (@wizard.current_submission || {})
-            .merge(@updater.submission)
-            .with_indifferent_access
+          @submission = @wizard.current_submission
+          @submission.fields.merge!(@updater.submission)
 
           @updater.validate
           next if @updater.errors.any?
@@ -73,11 +72,11 @@ class CustomWizard::Builder
           run_step_actions
 
           if @updater.errors.empty?
-            if route_to = @submission['route_to']
-              @submission.delete('route_to')
-            end
+            route_to = @submission.route_to
+            @submission.route_to = nil
+            @submission.save
 
-            @wizard.save_submission(@submission)
+            @wizard.update!
             @updater.result[:redirect_on_next] = route_to if route_to
 
             true
@@ -88,7 +87,8 @@ class CustomWizard::Builder
       end
     end
 
-    @wizard.update_step_order!
+    @wizard.update!
+    CustomWizard::Submission.cleanup_incomplete_submissions(@wizard)
     @wizard
   end
 
@@ -105,8 +105,8 @@ class CustomWizard::Builder
 
     params[:value] = prefill_field(field_template, step_template)
 
-    if !build_opts[:reset] && (submission = @wizard.current_submission)
-      params[:value] = submission[field_template['id']] if submission[field_template['id']]
+    if !build_opts[:reset] && (submission = @wizard.current_submission).present?
+      params[:value] = submission.fields[field_template['id']] if submission.fields[field_template['id']]
     end
 
     if field_template['type'] === 'group' && params[:value].present?
@@ -149,7 +149,7 @@ class CustomWizard::Builder
       content = CustomWizard::Mapper.new(
         inputs: content_inputs,
         user: @wizard.user,
-        data: @wizard.current_submission,
+        data: @wizard.current_submission&.fields_and_meta,
         opts: {
           with_type: true
         }
@@ -184,7 +184,7 @@ class CustomWizard::Builder
       index = CustomWizard::Mapper.new(
         inputs: field_template['index'],
         user: @wizard.user,
-        data: @wizard.current_submission
+        data: @wizard.current_submission&.fields_and_meta
       ).perform
 
       params[:index] = index.to_i unless index.nil?
@@ -193,6 +193,28 @@ class CustomWizard::Builder
     if field_template['description'].present?
       params[:description] = mapper.interpolate(
         field_template['description'],
+        user: true,
+        value: true,
+        wizard: true,
+        template: true
+      )
+    end
+
+    if field_template['preview_template'].present?
+      preview_template = mapper.interpolate(
+        field_template['preview_template'],
+        user: true,
+        value: true,
+        wizard: true,
+        template: true
+      )
+
+      params[:preview_template] = PrettyText.cook(preview_template)
+    end
+
+    if field_template['placeholder'].present?
+      params[:placeholder] = mapper.interpolate(
+        field_template['placeholder'],
         user: true,
         value: true,
         wizard: true,
@@ -267,7 +289,7 @@ class CustomWizard::Builder
       CustomWizard::Mapper.new(
         inputs: prefill,
         user: @wizard.user,
-        data: @wizard.current_submission
+        data: @wizard.current_submission&.fields_and_meta
       ).perform
     end
   end
@@ -277,7 +299,7 @@ class CustomWizard::Builder
       result = CustomWizard::Mapper.new(
         inputs: template['condition'],
         user: @wizard.user,
-        data: @wizard.current_submission,
+        data: @wizard.current_submission&.fields_and_meta,
         opts: {
           multiple: true
         }
@@ -347,19 +369,20 @@ class CustomWizard::Builder
     permitted_data = {}
     submission_key = nil
     params_key = nil
-    submission = @wizard.current_submission || {}
+    submission = @wizard.current_submission
 
     permitted_params.each do |pp|
       pair = pp['pairs'].first
       params_key = pair['key'].to_sym
       submission_key = pair['value'].to_sym
 
-      if submission_key && params_key
-        submission[submission_key] = params[params_key]
+      if submission_key && params_key && params[params_key].present?
+        submission.permitted_param_keys << submission_key.to_s
+        submission.fields[submission_key] = params[params_key]
       end
     end
 
-    @wizard.save_submission(submission)
+    submission.save
   end
 
   def ensure_required_data(step, step_template)
@@ -368,13 +391,13 @@ class CustomWizard::Builder
         pair['key'].present? && pair['value'].present?
       end
 
-      if pairs.any? && !@wizard.current_submission
+      if pairs.any? && !@wizard.current_submission.present?
         step.permitted = false
         break
       end
 
       pairs.each do |pair|
-        pair['key'] = @wizard.current_submission[pair['key']]
+        pair['key'] = @wizard.current_submission.fields[pair['key']]
       end
 
       if !mapper.validate_pairs(pairs)
@@ -398,11 +421,15 @@ class CustomWizard::Builder
     if @template.actions.present?
       @template.actions.each do |action_template|
         if action_template['run_after'] === updater.step.id
-          CustomWizard::Action.new(
+          result = CustomWizard::Action.new(
             action: action_template,
             wizard: @wizard,
-            data: @submission
+            submission: @submission
           ).perform
+
+          if result.success?
+            @submission = result.submission
+          end
         end
       end
     end
