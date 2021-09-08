@@ -5,20 +5,27 @@ class CustomWizard::Mapper
   USER_FIELDS = [
     'name',
     'username',
-    'email',
     'date_of_birth',
     'title',
     'locale',
     'trust_level',
+    'email'
+  ]
+
+  USER_OPTION_FIELDS = [
     'email_level',
     'email_messages_level',
     'email_digests'
   ]
 
-  PROFILE_FIELDS = ['location', 'website', 'bio_raw']
+  PROFILE_FIELDS = [
+    'location',
+    'website',
+    'bio_raw'
+  ]
 
   def self.user_fields
-    USER_FIELDS + PROFILE_FIELDS
+    USER_FIELDS + USER_OPTION_FIELDS + PROFILE_FIELDS
   end
 
   OPERATORS = {
@@ -197,11 +204,15 @@ class CustomWizard::Mapper
 
   def map_user_field(value)
     if value.include?(User::USER_FIELD_PREFIX)
-      UserCustomField.where(user_id: user.id, name: value).pluck(:value).first
+      user.custom_fields[value]
     elsif PROFILE_FIELDS.include?(value)
-      UserProfile.find_by(user_id: user.id).send(value)
+      user.user_profile.send(value)
     elsif USER_FIELDS.include?(value)
-      User.find(user.id).send(value)
+      user.send(value)
+    elsif USER_OPTION_FIELDS.include?(value)
+      user.user_option.send(value)
+    else
+      nil
     end
   end
 
@@ -214,22 +225,14 @@ class CustomWizard::Mapper
   end
 
   def interpolate(string, opts = { user: true, wizard: true, value: true, template: false })
-    return string if string.blank?
+    return string if string.blank? || string.frozen?
 
     if opts[:user]
-      string.gsub!(/u\{(.*?)\}/) do |match|
-        result = ''
-        result = user.send($1) if USER_FIELDS.include?($1)
-        result = user.user_profile.send($1) if PROFILE_FIELDS.include?($1)
-        result
-      end
+      string.gsub!(/u\{(.*?)\}/) { |match| map_user_field($1) || '' }
     end
 
     if opts[:wizard]
-      string.gsub!(/w\{(.*?)\}/) do |match|
-        value = recurse(data, [*$1.split('.')])
-        value.present? ? value : ''
-      end
+      string.gsub!(/w\{(.*?)\}/) { |match| recurse(data, [*$1.split('.')]) || '' }
     end
 
     if opts[:value]
