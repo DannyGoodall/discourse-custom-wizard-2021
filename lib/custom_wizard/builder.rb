@@ -92,6 +92,32 @@ class CustomWizard::Builder
     @wizard
   end
 
+  def check_condition(template)
+    if template['condition'].present?
+      result = CustomWizard::Mapper.new(
+        inputs: template['condition'],
+        user: @wizard.user,
+        data: @wizard.current_submission&.fields_and_meta,
+        opts: {
+          multiple: true
+        }
+      ).perform
+
+      result.any?
+    else
+      true
+    end
+  end
+
+  private
+
+  def mapper
+    CustomWizard::Mapper.new(
+      user: @wizard.user,
+      data: @wizard.current_submission&.fields_and_meta
+    )
+  end
+
   def append_field(step, step_template, field_template, build_opts)
     params = {
       id: field_template['id'],
@@ -270,23 +296,6 @@ class CustomWizard::Builder
         user: @wizard.user,
         data: @wizard.current_submission&.fields_and_meta
       ).perform
-    end
-  end
-
-  def check_condition(template)
-    if template['condition'].present?
-      result = CustomWizard::Mapper.new(
-        inputs: template['condition'],
-        user: @wizard.user,
-        data: @wizard.current_submission&.fields_and_meta,
-        opts: {
-          multiple: true
-        }
-      ).perform
-
-      result.any?
-    else
-      true
     end
   end
 

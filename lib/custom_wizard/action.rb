@@ -43,8 +43,16 @@ class CustomWizard::Action
     @mapper ||= CustomWizard::Mapper.new(user: user, data: mapper_data)
   end
 
+  def callbacks_for(action)
+    self.class.callbacks[action] || []
+  end
+
   def create_topic
     params = basic_topic_params.merge(public_topic_params)
+
+    callbacks_for(:before_create_topic).each do |acb|
+      params = acb.call(params, @wizard, @action, @submission)
+    end
 
     if params[:title].present? && params[:raw].present?
       creator = PostCreator.new(user, params)
@@ -417,6 +425,15 @@ class CustomWizard::Action
     end
   end
 
+  def self.callbacks
+    @callbacks ||= {}
+  end
+
+  def self.register_callback(action, &block)
+    callbacks[action] ||= []
+    callbacks[action] << block
+  end
+
   private
 
   def action_category
@@ -746,14 +763,11 @@ class CustomWizard::Action
   end
 
   def save_log
-    log = "wizard: #{@wizard.id}; action: #{action['type']}; user: #{user.username}"
-
-    if @log.any?
-      @log.each do |item|
-        log += "; #{item.to_s}"
-      end
-    end
-
-    CustomWizard::Log.create(log)
+    CustomWizard::Log.create(
+      @wizard.id,
+      action['type'],
+      user.username,
+      @log.join('; ')
+    )
   end
 end
