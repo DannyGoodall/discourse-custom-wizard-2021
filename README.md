@@ -23,3 +23,7 @@ If you're not sure how to install a plugin in Discourse, please follow the [plug
 ## Support
 
 - [Report a bug](https://discourse.pluginmanager.org/w/bug-report)
+
+## Debugged Using BrowserStack
+
+This project is tested with BrowserStack.
