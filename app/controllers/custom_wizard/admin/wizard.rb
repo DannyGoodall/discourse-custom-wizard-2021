@@ -114,6 +114,7 @@ class CustomWizard::AdminWizardController < CustomWizard::AdminController
           :property,
           :preview_template,
           :placeholder,
+          :can_create_tag,
           prefill: mapped_params,
           content: mapped_params,
           condition: mapped_params,
@@ -164,7 +165,8 @@ class CustomWizard::AdminWizardController < CustomWizard::AdminController
         messageable_level: mapped_params,
         visibility_level: mapped_params,
         members_visibility_level: mapped_params,
-        add_event: mapped_params
+        add_event: mapped_params,
+        add_location: mapped_params
       ]
     )
   end

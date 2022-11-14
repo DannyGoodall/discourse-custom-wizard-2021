@@ -18,16 +18,16 @@ class CustomWizard::Subscription
           standard: ['*'],
           business: ['*'],
           community: ['*']
-        }
-      },
-      step: {
-        condition: {
+        },
+        restart_on_revisit: {
           none: [],
           standard: ['*'],
           business: ['*'],
           community: ['*']
-        },
-        index: {
+        }
+      },
+      step: {
+        condition: {
           none: [],
           standard: ['*'],
           business: ['*'],
@@ -48,12 +48,6 @@ class CustomWizard::Subscription
       },
       field: {
         condition: {
-          none: [],
-          standard: ['*'],
-          business: ['*'],
-          community: ['*']
-        },
-        index: {
           none: [],
           standard: ['*'],
           business: ['*'],
@@ -93,6 +87,14 @@ class CustomWizard::Subscription
           business: ['*'],
           community: ['*']
         }
+      },
+      api: {
+        all: {
+          none: [],
+          standard: [],
+          business: ['*'],
+          community: ['*']
+        }
       }
     }
   end
@@ -101,7 +103,7 @@ class CustomWizard::Subscription
     @subscription = find_subscription
   end
 
-  def includes?(feature, attribute, value)
+  def includes?(feature, attribute, value = nil)
     attributes = self.class.attributes[feature]
 
     ## Attribute is not part of a subscription
